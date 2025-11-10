@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Chat Reactivo WebFlux + SSE</title>
+    <style>
+        /* Estilos básicos para el chat */
+        body { font-family: sans-serif; max-width: 600px; margin: 20px auto; }
+        h1 { text-align: center; color: #007bff; }
+        #chat-window { border: 1px solid #ddd; height: 350px; overflow-y: scroll; padding: 10px; margin-bottom: 10px; background-color: #f9f9f9; }
+        .message { margin-bottom: 8px; border-bottom: 1px dotted #eee; padding-bottom: 4px; line-height: 1.4; }
+        .me { text-align: right; color: #0056b3; }
+        .other { text-align: left; color: #28a745; }
+        .sender { font-weight: bold; margin-right: 5px; font-size: 0.9em; }
+        #controls { display: flex; margin-top: 10px; }
+        #message-input { flex-grow: 1; padding: 10px; border: 1px solid #ccc; border-radius: 4px; }
+        #user-info { display: flex; align-items: center; justify-content: space-between; margin-bottom: 15px; }
+        #username { padding: 8px; border: 1px solid #ccc; border-radius: 4px; flex-grow: 1; margin-right: 10px; }
+        button { padding: 10px 15px; background-color: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer; }
+        button:disabled { background-color: #cccccc; cursor: not-allowed; }
+        small { color: #888; font-size: 0.75em; }
+    </style>
+</head>
+<body>
+
+<h1>Chat Reactivo WebFlux 💬</h1>
+
+<div id="user-info">
+    <label for="username">Usuario:</label>
+    <input type="text" id="username" value="Invitado" required>
+    <button onclick="registerAndConnect()">Conectar</button>
+</div>
+<hr>
+
+<div id="chat-window">
+    <p style="text-align: center; color: #888;">Ingresa tu nombre y haz clic en Conectar.</p>
+</div>
+
+<div id="controls">
+    <input type="text" id="message-input" placeholder="Escribe un mensaje..." onkeyup="if(event.key === 'Enter') sendMessage()">
+    <button onclick="sendMessage()">Enviar</button>
+</div>
+
+<script>
+    // 1. CONFIGURACIÓN DE LA API (Asegúrate que coincida con tu Spring Boot)
+    const API_URL = "http://localhost:8080/api/v1/chat";
+
+    // 2. Elementos del DOM
+    const chatWindow = document.getElementById('chat-window');
+    const usernameInput = document.getElementById('username');
+    const messageInput = document.getElementById('message-input');
+    const connectButton = document.querySelector('#user-info button');
+
+    // 3. Variables de estado
+    let currentUserId = null;
+    let currentUsername = null;
+    let eventSource = null;
+
+    // --- Funciones del Chat ---
+
+    // Muestra un mensaje en la ventana del chat
+    function appendMessage(msg) {
+        const div = document.createElement('div');
+        // Identifica si el mensaje es propio para darle estilo
+        const isMe = msg.senderUsername === currentUsername;
+        div.classList.add('message', isMe ? 'me' : 'other');
+
+        const timestamp = new Date(msg.timestamp).toLocaleTimeString();
+
+        // Si el mensaje es propio, el nombre de usuario va al final
+        const senderTag = `<span class="sender">${msg.senderUsername}:</span>`;
+
+        div.innerHTML = `${senderTag} ${msg.content} <br><small>${timestamp}</small>`;
+
+        chatWindow.appendChild(div);
+        // Hacer scroll al final
+        chatWindow.scrollTop = chatWindow.scrollHeight;
+    }
+
+    // 1. Registro y Conexión al Stream
+    async function registerAndConnect() {
+        currentUsername = usernameInput.value.trim();
+        if (!currentUsername) {
+            alert("Por favor, ingresa un nombre de usuario.");
+            return;
+        }
+
+        // Petición POST para encontrar o crear el usuario
+        try {
+            const response = await fetch(`${API_URL}/user`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ username: currentUsername })
+            });
+
+            if (!response.ok) throw new Error('Error en el registro de usuario');
+
+            const user = await response.json();
+            currentUserId = user.id;
+            console.log(`Usuario conectado: ${user.username} (ID: ${user.id})`);
+
+            // Actualizar interfaz
+            chatWindow.innerHTML = '';
+            usernameInput.disabled = true;
+            connectButton.disabled = true;
+
+            // Cargar historial y luego iniciar el stream
+            await loadHistory();
+            startStream();
+
+        } catch (error) {
+            console.error("Fallo al conectar:", error);
+            alert(`No se pudo conectar al servidor Spring Boot. Error: ${error.message}`);
+        }
+    }
+
+    // 2. Carga el historial inicial
+    async function loadHistory() {
+        try {
+            const response = await fetch(`${API_URL}/history`);
+            if (response.ok) {
+                const messages = await response.json();
+                messages.forEach(appendMessage);
+            }
+        } catch (e) {
+            console.error("Error al cargar historial:", e);
+        }
+    }
+
+    // 3. Conecta al stream SSE
+    function startStream() {
+        // Cierra una conexión previa si existe
+        if (eventSource) eventSource.close();
+
+        // EventSource es la API nativa de JavaScript para SSE
+        eventSource = new EventSource(`${API_URL}/stream`);
+
+        eventSource.onmessage = (event) => {
+            try {
+                // Los datos llegan como una cadena JSON en 'event.data'
+                const newMessage = JSON.parse(event.data);
+                appendMessage(newMessage);
+            } catch(e) {
+                console.error("Error al parsear mensaje SSE:", e);
+            }
+        };
+
+        eventSource.onerror = (error) => {
+            console.error("Conexión SSE perdida o fallida.", error);
+            // Intenta reconectar después de un tiempo
+            eventSource.close();
+            setTimeout(startStream, 5000);
+        };
+    }
+
+    // 4. Envía un mensaje al servidor
+    async function sendMessage() {
+        const content = messageInput.value.trim();
+        if (!content || !currentUserId) return;
+
+        const messagePayload = {
+            userId: currentUserId,
+            content: content
+        };
+
+        try {
+            const response = await fetch(`${API_URL}/message`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(messagePayload)
+            });
+
+            if (response.ok) {
+                messageInput.value = ''; // Limpiar input después de enviar
+                // NO llamamos a appendMessage, el stream SSE se encargará de mostrarlo en tiempo real.
+            } else {
+                alert("Error al enviar mensaje. Verifique la consola.");
+            }
+        } catch (error) {
+            console.error("Error de red al enviar mensaje:", error);
+        }
+    }
+</script>
+</body>
+</html>
