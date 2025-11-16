@@ -42,8 +42,13 @@
 </div>
 
 <script>
-    // 1. CONFIGURACIÓN DE LA API (Asegúrate que coincida con tu Spring Boot)
-    const API_URL = "http://localhost:8080/api/v1/chat";
+    // CONFIGURACIÓN DINÁMICA DE LA API
+    // Detecta automáticamente si estás en local o en producción (Render)
+    const RENDER_DOMAIN = window.location.hostname === 'localhost'
+        ? 'http://localhost:8080'
+        : window.location.origin;
+
+    const API_URL = `${RENDER_DOMAIN}/api/v1/chat`; // Ruta base del controlador
 
     // 2. Elementos del DOM
     const chatWindow = document.getElementById('chat-window');
@@ -93,7 +98,11 @@
                 body: JSON.stringify({ username: currentUsername })
             });
 
-            if (!response.ok) throw new Error('Error en el registro de usuario');
+            if (!response.ok) {
+                 // Capturar mensaje de error del cuerpo de la respuesta si está disponible
+                const errorText = await response.text();
+                throw new Error(`[${response.status}] ${errorText || 'Error en el registro de usuario'}`);
+            }
 
             const user = await response.json();
             currentUserId = user.id;
@@ -110,7 +119,8 @@
 
         } catch (error) {
             console.error("Fallo al conectar:", error);
-            alert(`No se pudo conectar al servidor Spring Boot. Error: ${error.message}`);
+            // Mostrar el error de red o de la API
+            alert(`No se pudo conectar al servidor Spring Boot. Revise la consola (F12) o su configuración CORS en el backend. Error: ${error.message}`);
         }
     }
 
@@ -146,10 +156,16 @@
         };
 
         eventSource.onerror = (error) => {
-            console.error("Conexión SSE perdida o fallida.", error);
+            console.error("Conexión SSE perdida o fallida. Intentando reconectar...", error);
             // Intenta reconectar después de un tiempo
             eventSource.close();
-            setTimeout(startStream, 5000);
+            // Solo reconectar si no hay una reconexión ya programada
+            if (!eventSource.reconnectTimeout) {
+                eventSource.reconnectTimeout = setTimeout(() => {
+                    eventSource.reconnectTimeout = null;
+                    startStream();
+                }, 5000);
+            }
         };
     }
 
@@ -172,7 +188,7 @@
 
             if (response.ok) {
                 messageInput.value = ''; // Limpiar input después de enviar
-                // NO llamamos a appendMessage, el stream SSE se encargará de mostrarlo en tiempo real.
+                // El stream SSE se encargará de mostrar el mensaje.
             } else {
                 alert("Error al enviar mensaje. Verifique la consola.");
             }

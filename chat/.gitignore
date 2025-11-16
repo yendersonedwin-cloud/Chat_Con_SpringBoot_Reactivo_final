@@ -1,5 +1,5 @@
 HELP.md
-target/
+target/          # ✅ DESCOMENTADO
 .mvn/wrapper/maven-wrapper.jar
 !**/src/main/**/target/
 !**/src/test/**/target/
@@ -32,8 +32,7 @@ build/
 ### VS Code ###
 .vscode/
 
-
-# Archivos de configuracion sensibles (Credenciales de DB, APIs, etc.)
+# Archivos de configuracion sensibles
 #######################################
 application-local.properties
 application-local.yml

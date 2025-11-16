@@ -1,0 +1,7 @@
+com\api\reactiva\chat\controller\ChatController.class
+com\api\reactiva\chat\model\Message.class
+com\api\reactiva\chat\repository\MessageRepository.class
+com\api\reactiva\chat\service\ChatService.class
+com\api\reactiva\chat\ChatApplication.class
+com\api\reactiva\chat\model\User.class
+com\api\reactiva\chat\repository\UserRepository.class

@@ -13,8 +13,8 @@ import reactor.core.publisher.Sinks;
 @Service
 public class ChatService {
     @Autowired
-        private final MessageRepository messageRepository;
-        private final UserRepository userRepository;
+    private final MessageRepository messageRepository;
+    private final UserRepository userRepository;
 
         // Sinks actúa como un emisor de eventos reactivos (Multicast para varios suscriptores)
         private final Sinks.Many<Message> chatSink = Sinks.many().multicast().onBackpressureBuffer();

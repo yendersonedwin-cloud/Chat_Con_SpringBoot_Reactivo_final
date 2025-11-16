@@ -1,0 +1,16 @@
+target/
+build/
+.idea/
+.vscode/
+*.iml
+.git/
+.gitignore
+README.md
+HELP.md
+application-local.properties
+node_modules/
+*.log
+.DS_Store
+Thumbs.db
+Dockerfile
+.dockerignore
